@@ -1,1 +1,1 @@
-An API created for checking eligibility of flight compensation
+An API for checking flight compensation eligibility
