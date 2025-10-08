@@ -81,8 +81,8 @@ export class CompensationController {
         const flightStatus = flight.flightStatuses[0];
 
         const actualCancelled =
-            flightStatus.status == 'C' || flightStatus.status == 'R'; // C - cancelled, R - redirected
-        const delayMinutes = flightStatus.delays?.arrivalGateDelayMinutes
+            flightStatus?.status == 'C' || flightStatus?.status == 'R'; // C - cancelled, R - redirected
+        const delayMinutes = flightStatus?.delays?.arrivalGateDelayMinutes
             ? flightStatus.delays.arrivalGateDelayMinutes
             : 0;
 
@@ -115,7 +115,7 @@ export class CompensationController {
             throw new BadRequestException('Invalid date value');
         }
 
-        const flightRegex = /^([A-Z]{2})(\d{1,4})$/i;
+        const flightRegex = /^([A-Z0-9]{2})(\d{1,4})$/i;
         const match = flightNumber.match(flightRegex);
         if (!match) {
             throw new BadRequestException(
