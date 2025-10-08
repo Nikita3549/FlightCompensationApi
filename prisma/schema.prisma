@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Airline {
+  id      Int      @id @default(autoincrement())
+  fs      String
+  iata    String   @unique
+  icao    String
+  name    String
+  active  Boolean
+  flights Flight[] @relation("AirlineFlights")
+}
+
+model Airport {
+  id                 Int      @id @default(autoincrement())
+  fs                 String
+  iata               String   @unique
+  icao               String?
+  faa                String?
+  name               String
+  city               String
+  cityCode           String
+  countryCode        String
+  countryName        String
+  regionName         String
+  timeZoneRegionName String
+  weatherZone        String?
+  localTime          DateTime
+  utcOffsetHours     Float
+  latitude           Float
+  longitude          Float
+  elevationFeet      Int?
+  classification     Int
+  active             Boolean
+  weatherUrl         String?
+  delayIndexUrl      String?
+
+  departures Flight[] @relation("DepartureAirport")
+  arrivals   Flight[] @relation("ArrivalAirport")
+}
+
+model Equipment {
+  id        Int      @id @default(autoincrement())
+  iata      String   @unique
+  name      String
+  turboProp Boolean
+  jet       Boolean
+  widebody  Boolean
+  regional  Boolean
+  flights   Flight[]
+}
+
+model Flight {
+  id            Int    @id @default(autoincrement())
+  flightId      Int    @unique
+  carrierFsCode String
+  flightNumber  String
+  status        String
+
+  airlineId Int?
+  airline   Airline? @relation("AirlineFlights", fields: [airlineId], references: [id])
+
+  departureAirportId Int?
+  departureAirport   Airport? @relation("DepartureAirport", fields: [departureAirportId], references: [id])
+
+  arrivalAirportId Int?
+  arrivalAirport   Airport? @relation("ArrivalAirport", fields: [arrivalAirportId], references: [id])
+
+  scheduledDepartureUtc DateTime?
+  scheduledArrivalUtc   DateTime?
+  estimatedDepartureUtc DateTime?
+  estimatedArrivalUtc   DateTime?
+  actualDepartureUtc    DateTime?
+  actualArrivalUtc      DateTime?
+
+  departureLocal DateTime?
+  arrivalLocal   DateTime?
+
+  delays           Delay?
+  durations        FlightDuration?
+  airportResources AirportResource?
+  equipmentId      Int?
+  equipment        Equipment?       @relation(fields: [equipmentId], references: [id])
+
+  codeshares Codeshare[]
+}
+
+model Codeshare {
+  id           Int     @id @default(autoincrement())
+  fsCode       String
+  flightNumber String
+  relationship String?
+  flightId     Int
+  flight       Flight  @relation(fields: [flightId], references: [id])
+
+  @@unique([fsCode, flightNumber, flightId])
+}
+
+model Delay {
+  id                        Int    @id @default(autoincrement())
+  departureGateDelayMinutes Int?
+  arrivalGateDelayMinutes   Int?
+  flightId                  Int    @unique
+  flight                    Flight @relation(fields: [flightId], references: [id])
+}
+
+model FlightDuration {
+  id                    Int    @id @default(autoincrement())
+  scheduledBlockMinutes Int?
+  blockMinutes          Int?
+  airMinutes            Int?
+  taxiOutMinutes        Int?
+  taxiInMinutes         Int?
+  flightId              Int    @unique
+  flight                Flight @relation(fields: [flightId], references: [id])
+}
+
+model AirportResource {
+  id                Int     @id @default(autoincrement())
+  departureTerminal String?
+  departureGate     String?
+  arrivalTerminal   String?
+  baggage           String?
+  flightId          Int     @unique
+  flight            Flight  @relation(fields: [flightId], references: [id])
+}
