@@ -109,13 +109,9 @@ components:
               type: string
               example: 2025-10-06T06:20:00.000
         departureAirport:
-          type: array
-          items:
-            $ref: '#/components/schemas/Airport'
+          $ref: '#/components/schemas/Airport'
         arrivalAirport:
-          type: array
-          items:
-            $ref: '#/components/schemas/Airport'
+          $ref: '#/components/schemas/Airport'
         delay:
           type: integer
           example: 180

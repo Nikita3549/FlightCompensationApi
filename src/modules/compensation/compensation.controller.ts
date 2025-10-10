@@ -39,6 +39,7 @@ export class CompensationController {
                 await this.redis.del(cacheKey);
             }
         }
+        debugger;
 
         const airline = await this.airlineService.getAirlineByIata(iataCode);
         const airlineCode = airline ? airline.icao : iataCode;
@@ -50,6 +51,7 @@ export class CompensationController {
             date,
         );
         debugger;
+        console.log(flightResponse);
         if (
             !flightResponse ||
             (flightResponse as any).error ||
@@ -92,7 +94,7 @@ export class CompensationController {
 
         const findAirport = (code: string) =>
             flight.appendix.airports
-                .filter((a) => a.icao === code || a.iata === code)
+                .filter((a) => a.fs == code)
                 .map((a) => ({
                     name: a.name,
                     countryName: a.countryName,

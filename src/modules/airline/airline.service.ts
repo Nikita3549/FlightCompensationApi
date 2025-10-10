@@ -38,6 +38,7 @@ export class AirlineService implements OnModuleInit {
          FROM airlines
          WHERE active = true
            AND iata_code = $1
+             AND active = true
          LIMIT 1;`,
             [iata.toUpperCase()],
         );
