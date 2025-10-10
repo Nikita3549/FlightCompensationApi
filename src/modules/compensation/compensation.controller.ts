@@ -101,7 +101,7 @@ export class CompensationController {
                     city: a.city,
                     icao: a.icao,
                     iata: a.iata,
-                }));
+                }))[0];
 
         return {
             isEligible,
