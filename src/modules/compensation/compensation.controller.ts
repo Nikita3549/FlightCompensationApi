@@ -21,82 +21,94 @@ export class CompensationController {
         @Query() dto: GetCompensationEligibilityDto,
     ) {
         const { flightCode, iataCode, date } = this.parseFlightDto(dto);
-        const cacheKey = `eligibility:${iataCode}${flightCode}:${date.toISOString().split('T')[0]}`;
 
-        const flight = await (async (): Promise<FlightStatsResponse | null> => {
-            // Try cache
-            const cached = await this.redis.get(cacheKey);
-            if (cached) {
+        const dateKey = date.toISOString().split('T')[0];
+        const keyIata = iataCode.toUpperCase();
+        const keyFlight = flightCode.toUpperCase();
+        const cacheKey = `eligibility:${keyIata}${keyFlight}:${dateKey}`;
+
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+            try {
                 console.log('cache');
-                return JSON.parse(cached) as FlightStatsResponse;
+                const flightFromCache = JSON.parse(
+                    cached,
+                ) as FlightStatsResponse;
+                return this.buildEligibilityResponse(flightFromCache);
+            } catch {
+                await this.redis.del(cacheKey);
             }
-            const airline =
-                await this.airlineService.getAirlineByIata(iataCode);
-            const airlineCode = airline ? airline.icao : iataCode;
-
-            // Try db
-            const dbFlight = await this.flightService.getFlightByFlightCode(
-                flightCode,
-                airlineCode,
-                date,
-            );
-
-            if (dbFlight) {
-                await this.redis.set(
-                    cacheKey,
-                    JSON.stringify(dbFlight),
-                    'EX',
-                    600,
-                );
-                console.log('db');
-                return dbFlight;
-            }
-
-            const flightStatus = await this.flightService.getFlightByFlightCode(
-                flightCode,
-                airlineCode,
-                date,
-            );
-            console.log('api');
-
-            if (flightStatus) {
-                await this.flightService.saveFlightStats(flightStatus);
-                await this.redis.set(
-                    cacheKey,
-                    JSON.stringify(flightStatus),
-                    'EX',
-                    600,
-                );
-                return flightStatus;
-            }
-            return null;
-        })();
-
-        if (!flight) {
-            return {
-                isEligible: false,
-            };
         }
 
+        const airline = await this.airlineService.getAirlineByIata(iataCode);
+        const airlineCode = airline ? airline.icao : iataCode;
+
+        console.log('api');
+        let flightResponse = await this.flightService.getFlightByFlightCode(
+            flightCode,
+            airlineCode,
+            date,
+        );
+        debugger;
+        if (
+            !flightResponse ||
+            (flightResponse as any).error ||
+            !flightResponse?.flightStatuses[0]
+        ) {
+            return { isEligible: false };
+        }
+
+        debugger;
+        if (
+            !(await this.flightService.getFlightByFlightCode(
+                flightCode,
+                airlineCode,
+                date,
+            ))
+        ) {
+            await this.flightService.saveFlightStats(flightResponse);
+        }
+        debugger;
+        await this.redis.set(
+            cacheKey,
+            JSON.stringify(flightResponse),
+            'EX',
+            600,
+        );
+
+        return this.buildEligibilityResponse(flightResponse);
+    }
+
+    private buildEligibilityResponse(flight: FlightStatsResponse) {
         const flightStatus = flight.flightStatuses[0];
+        if (!flightStatus) return { isEligible: false };
 
         const actualCancelled =
-            flightStatus?.status == 'C' || flightStatus?.status == 'R'; // C - cancelled, R - redirected
-        const delayMinutes = flightStatus?.delays?.arrivalGateDelayMinutes
-            ? flightStatus.delays.arrivalGateDelayMinutes
-            : 0;
+            flightStatus.status === 'C' || flightStatus.status === 'R';
+        const delayMinutes = flightStatus.delays?.arrivalGateDelayMinutes || 0;
 
         const isEligible = delayMinutes > 180 || actualCancelled;
+        if (!isEligible) return { isEligible: false };
 
-        if (isEligible) {
-            return {
-                isEligible,
-                reason: actualCancelled ? 'cancellation' : 'delay',
-            };
-        }
+        const findAirport = (code: string) =>
+            flight.appendix.airports
+                .filter((a) => a.icao === code || a.iata === code)
+                .map((a) => ({
+                    name: a.name,
+                    countryName: a.countryName,
+                    city: a.city,
+                    icao: a.icao,
+                    iata: a.iata,
+                }));
 
         return {
-            isEligible: false,
+            isEligible,
+            reason: actualCancelled ? 'cancellation' : 'delay',
+            arrivalDate: flightStatus.arrivalDate,
+            departureDate: flightStatus.departureDate,
+            departureAirport: findAirport(flightStatus.departureAirportFsCode),
+            arrivalAirport: findAirport(flightStatus.arrivalAirportFsCode),
+            delay: delayMinutes,
         };
     }
 
