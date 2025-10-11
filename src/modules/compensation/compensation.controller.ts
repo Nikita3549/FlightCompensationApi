@@ -90,7 +90,7 @@ export class CompensationController {
         const delayMinutes = flightStatus.delays?.arrivalGateDelayMinutes || 0;
 
         const isEligible = delayMinutes > 180 || actualCancelled;
-        if (!isEligible) return { isEligible: false };
+        if (!isEligible) return { isEligible: false, delay: delayMinutes };
 
         const findAirport = (code: string) =>
             flight.appendix.airports
