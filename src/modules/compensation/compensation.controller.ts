@@ -26,7 +26,7 @@ export class CompensationController {
 
         const airline = await this.airlineService.getAirlineByIata(iataCode);
         const airlineCode = airline ? airline.icao : iataCode;
-        const flightNumber = `${airlineCode}${flightCode}`;
+        const flightNumber = `${iataCode}${flightCode}`;
 
         const cached = await this.redis.get(cacheKey);
         if (cached) {
