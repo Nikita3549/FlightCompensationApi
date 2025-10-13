@@ -34,13 +34,12 @@ enum CancellationReason {
 }
 
 model Airport {
-  id          String      @id @default(uuid())
-  name        String
-  city        String
-  icao        String
-  iata        String
-  countryName String      @map("country_name")
-  type        AirportType
+  id   String      @id @default(uuid())
+  name String
+  city String
+  icao String
+  iata String
+  type AirportType
 
   flightId String
   flight   Flight @relation(fields: [flightId], references: [id])

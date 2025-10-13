@@ -13,14 +13,12 @@ export interface FlightData {
         city: string;
         icao: string;
         iata: string;
-        countryName: string;
     };
     arrivalAirport: {
         name: string;
         city: string;
         icao: string;
         iata: string;
-        countryName: string;
     };
 }
 

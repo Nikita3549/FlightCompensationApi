@@ -132,10 +132,6 @@ components:
           type: string
           description: The full name of the airport.
           example: Berlin Brandenburg Airport
-        countryName:
-          type: string
-          description: The country where the airport is located.
-          example: Germany
         city:
           type: string
           description: The city where the airport is located.

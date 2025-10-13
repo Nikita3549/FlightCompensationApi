@@ -51,11 +51,7 @@ export class CompensationController {
         }
 
         if (!(await this.flightService.getFlightFromDb(flightNumber, date))) {
-            await this.flightService.saveFlightStats(
-                flight,
-                flightNumber,
-                date,
-            );
+            await this.flightService.saveFlight(flight, flightNumber, date);
         }
 
         await this.redis.set(cacheKey, JSON.stringify(flight), 'EX', 900);
@@ -76,13 +72,7 @@ export class CompensationController {
             'arrivalAirport',
         ] as const;
 
-        const requiredAirportFields = [
-            'name',
-            'city',
-            'icao',
-            'iata',
-            'countryName',
-        ] as const;
+        const requiredAirportFields = ['name', 'city', 'icao', 'iata'] as const;
 
         if (
             flight &&
