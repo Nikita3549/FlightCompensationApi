@@ -3,10 +3,7 @@ import { AirlineService } from '../airline/airline.service';
 import { GetCompensationEligibilityDto } from './dto/get-compensation-eligibility.dto';
 import { FlightService } from '../flight/flight.service';
 import { RedisService } from '../redis/redis.service';
-import {
-    FlightStatsResponse,
-    IFlightStatsFlight,
-} from '../flight/interfaces/fight-stats-flight';
+import { FlightData } from '../flight/interfaces/flight-data.interface';
 
 @Controller('compensation')
 export class CompensationController {
@@ -27,90 +24,116 @@ export class CompensationController {
         const keyFlight = flightCode.toUpperCase();
         const cacheKey = `eligibility:${keyIata}${keyFlight}:${dateKey}`;
 
+        const airline = await this.airlineService.getAirlineByIata(iataCode);
+        const airlineCode = airline ? airline.icao : iataCode;
+        const flightNumber = `${airlineCode}${flightCode}`;
+
         const cached = await this.redis.get(cacheKey);
         if (cached) {
             try {
                 console.log('cache');
-                const flightFromCache = JSON.parse(
-                    cached,
-                ) as FlightStatsResponse;
+                const flightFromCache = JSON.parse(cached) as FlightData;
                 return this.buildEligibilityResponse(flightFromCache);
             } catch {
                 await this.redis.del(cacheKey);
             }
         }
-        debugger;
-
-        const airline = await this.airlineService.getAirlineByIata(iataCode);
-        const airlineCode = airline ? airline.icao : iataCode;
 
         console.log('api');
-        let flightResponse = await this.flightService.getFlightByFlightCode(
+        let flight = await this.flightService.getFlightByFlightCode(
             flightCode,
             airlineCode,
             date,
         );
-        debugger;
-        console.log(flightResponse);
-        if (
-            !flightResponse ||
-            (flightResponse as any).error ||
-            !flightResponse?.flightStatuses[0]
-        ) {
+
+        if (!flight) {
             return { isEligible: false };
         }
 
-        debugger;
-        if (
-            !(await this.flightService.getFlightByFlightCode(
-                flightCode,
-                airlineCode,
+        if (!(await this.flightService.getFlightFromDb(flightNumber, date))) {
+            await this.flightService.saveFlightStats(
+                flight,
+                flightNumber,
                 date,
-            ))
-        ) {
-            await this.flightService.saveFlightStats(flightResponse);
+            );
         }
-        debugger;
-        await this.redis.set(
-            cacheKey,
-            JSON.stringify(flightResponse),
-            'EX',
-            600,
-        );
 
-        return this.buildEligibilityResponse(flightResponse);
+        await this.redis.set(cacheKey, JSON.stringify(flight), 'EX', 900);
+
+        return this.buildEligibilityResponse(flight);
     }
 
-    private buildEligibilityResponse(flight: FlightStatsResponse) {
-        const flightStatus = flight.flightStatuses[0];
-        if (!flightStatus) return { isEligible: false };
+    private buildEligibilityResponse(flight: FlightData) {
+        const requiredTopLevelFields = [
+            'isEligible',
+            'reason',
+            'arrivalDateUtc',
+            'arrivalDateLocal',
+            'departureDateUtc',
+            'departureDateLocal',
+            'delayMinutes',
+            'departureAirport',
+            'arrivalAirport',
+        ] as const;
 
-        const actualCancelled =
-            flightStatus.status === 'C' || flightStatus.status === 'R';
-        const delayMinutes = flightStatus.delays?.arrivalGateDelayMinutes || 0;
+        const requiredAirportFields = [
+            'name',
+            'city',
+            'icao',
+            'iata',
+            'countryName',
+        ] as const;
 
-        const isEligible = delayMinutes > 180 || actualCancelled;
-        if (!isEligible) return { isEligible: false, delay: delayMinutes };
+        if (
+            flight &&
+            flight?.isEligible != null &&
+            flight?.delayMinutes &&
+            !flight.isEligible
+        ) {
+            return {
+                isEligible: false,
+                delay: flight.delayMinutes,
+            };
+        }
 
-        const findAirport = (code: string) =>
-            flight.appendix.airports
-                .filter((a) => a.fs == code)
-                .map((a) => ({
-                    name: a.name,
-                    countryName: a.countryName,
-                    city: a.city,
-                    icao: a.icao,
-                    iata: a.iata,
-                }))[0];
+        const validateAirport = (airport: any) => {
+            for (const field of requiredAirportFields) {
+                if (!airport?.[field]) {
+                    return {
+                        isEligible: false,
+                    };
+                }
+            }
+        };
+
+        const validateFlight = (data: any) => {
+            for (const field of requiredTopLevelFields) {
+                if (data[field] === undefined || data[field] === null) {
+                    return {
+                        isEligible: false,
+                    };
+                }
+            }
+        };
+
+        validateFlight(flight);
+        validateAirport(flight.departureAirport);
+        validateAirport(flight.arrivalAirport);
 
         return {
-            isEligible,
-            reason: actualCancelled ? 'cancellation' : 'delay',
-            arrivalDate: flightStatus.arrivalDate,
-            departureDate: flightStatus.departureDate,
-            departureAirport: findAirport(flightStatus.departureAirportFsCode),
-            arrivalAirport: findAirport(flightStatus.arrivalAirportFsCode),
-            delay: delayMinutes,
+            isEligible: flight.isEligible,
+            reason: flight.reason,
+            arrivalDate: {
+                dateUtc: flight.arrivalDateUtc,
+                dateLocal: flight.arrivalDateLocal,
+            },
+            departureDate: {
+                dateUtc: flight.departureDateUtc,
+                dateLocal: flight.departureDateLocal,
+            },
+            departureAirport: flight.departureAirport,
+            arrivalAirport: flight.arrivalAirport,
+            delay: flight.delayMinutes,
         };
     }
 
