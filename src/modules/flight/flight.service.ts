@@ -175,7 +175,8 @@ ${JSON.stringify(formattedFlight, null, 2)}`);
                 flightStatus.delays?.arrivalGateDelayMinutes || 0;
 
             const actual =
-                flightStatus.operationalTimes.actualGateArrival?.dateUtc;
+                flightStatus.operationalTimes.actualGateArrival?.dateUtc ||
+                flightStatus.operationalTimes.actualRunwayArrival?.dateUtc;
             const scheduled =
                 flightStatus.operationalTimes.scheduledGateArrival?.dateUtc;
 
