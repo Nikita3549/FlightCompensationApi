@@ -171,8 +171,21 @@ ${JSON.stringify(formattedFlight, null, 2)}`);
 
             const actualCancelled =
                 flightStatus.status === 'C' || flightStatus.status === 'R';
-            const delayMinutes =
+            let delayMinutes =
                 flightStatus.delays?.arrivalGateDelayMinutes || 0;
+
+            const actual =
+                flightStatus.operationalTimes.actualGateArrival?.dateUtc;
+            const scheduled =
+                flightStatus.operationalTimes.scheduledGateArrival?.dateUtc;
+
+            if (delayMinutes == 0 && actual && scheduled) {
+                const actualDate = new Date(actual);
+                const scheduledDate = new Date(scheduled);
+                delayMinutes = Math.round(
+                    (actualDate.getTime() - scheduledDate.getTime()) / 60000,
+                );
+            }
 
             const isEligible = delayMinutes > 180 || actualCancelled;
 
