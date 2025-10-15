@@ -110,7 +110,6 @@ id,name,alias,iata_code,icao_code,callsign,country,active
 109,"Alaska Central Express",\N,"KO","AER","ACE AIR","United States","Y"
 110,"ACES Colombia",\N,"","AES","ACES","Colombia","Y"
 111,"Aeronautical Radio of Thailand",\N,"","AET","AEROTHAI","Thailand","N"
-112,"Astraeus",\N,"5W","AEU","FLYSTAR","United Kingdom","Y"
 113,"Aeroventas",\N,"","AEV","AEROVENTAS","Mexico","N"
 114,"Aerosvit Airlines",\N,"VV","AEW","AEROSVIT","Ukraine","Y"
 115,"Airway Express",\N,"","AEX","AVCO","United States","N"
