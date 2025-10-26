@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { FlightStatsResponse } from './interfaces/fight-stats-flight.interface';
 import { FlightData, isFlightData } from './interfaces/flight-data.interface';
@@ -11,19 +11,37 @@ import {
 } from './interfaces/flight-aware-flight';
 import { formatDate } from '../../utlis/formatDate';
 import { FlightTime } from '../../utlis/flight-time.util';
+import { IOAGFlightInfo } from './interfaces/oag-flight-info.interface';
+import { IFullOAGFlight } from './interfaces/oag-flight-full-info.interface';
+import { combineDateTime } from './utils/combineDateTime';
+import { AirportService } from '../airport/airport.service';
 
 @Injectable()
 export class FlightService {
     constructor(
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
+        private readonly airportService: AirportService,
     ) {}
+
     async getFlightByFlightCode(
         flightCode: string,
         airlineCode: string,
         date: Date,
+        airlineCodeType: 'IATA' | 'ICAO',
     ): Promise<FlightData | null> {
         try {
+            const flightFromOAG = await this.getFlightFromOAG(
+                flightCode,
+                airlineCode,
+                date,
+                airlineCodeType,
+            );
+
+            if (flightFromOAG) {
+                return flightFromOAG;
+            }
+
             const flightFromFlightStats = await this.getFlightFromFlightStats(
                 flightCode,
                 airlineCode,
@@ -46,6 +64,137 @@ export class FlightService {
 
             return null;
         } catch (e) {
+            return null;
+        }
+    }
+
+    private async getFlightFromOAG(
+        flightCode: string,
+        airlineCode: string,
+        date: Date,
+        airlineCodeType: string,
+    ): Promise<FlightData | null> {
+        try {
+            const formattedDate = formatDate(date, 'yyyy-mm-dd');
+
+            const flightInfo = await axios.get<IOAGFlightInfo>(
+                `https://api.oag.com/flight-instances/?DepartureDateTime=${formattedDate}&CarrierCode=${airlineCode}&FlightNumber=${flightCode}&version=v2&CodeType=${airlineCodeType}`,
+                {
+                    headers: {
+                        ['Subscription-Key']: this.configService.getOrThrow(
+                            'OAG_SUBSCRIPTION_KEY',
+                        ),
+                    },
+                },
+            );
+
+            const scheduleKey = flightInfo?.data?.data[0]?.scheduleInstanceKey;
+
+            if (!scheduleKey) {
+                return null;
+            }
+
+            const res = await axios.get<IFullOAGFlight>(
+                `https://api.oag.com/flight-instances/${formattedDate}/${scheduleKey}?version=v2`,
+                {
+                    headers: {
+                        ['Subscription-Key']: this.configService.getOrThrow(
+                            'OAG_SUBSCRIPTION_KEY',
+                        ),
+                    },
+                },
+            );
+
+            const fullFlight = res.data;
+            console.log(JSON.stringify(fullFlight, null, 2));
+
+            if (
+                !fullFlight?.arrival?.date?.local ||
+                !fullFlight?.arrival?.time?.local ||
+                !fullFlight?.departure?.date?.local ||
+                !fullFlight?.departure?.time?.local ||
+                !fullFlight?.arrival?.date?.utc ||
+                !fullFlight?.arrival?.time?.utc ||
+                !fullFlight?.departure?.date?.utc ||
+                !fullFlight?.departure?.time?.utc ||
+                !fullFlight.departure.airport.iata ||
+                !fullFlight.departure.airport.icao ||
+                !fullFlight.arrival.airport.iata ||
+                !fullFlight.arrival.airport.icao
+            ) {
+                return null;
+            }
+
+            const delayMinutes =
+                this.getArrivalDelayMinutesForOAG(fullFlight) ?? 0;
+
+            const departureAirport = await this.airportService.getAirportByIcao(
+                fullFlight.departure.airport.icao,
+            );
+
+            const arrivalAirport = await this.airportService.getAirportByIcao(
+                fullFlight.arrival.airport.icao,
+            );
+
+            if (!departureAirport || !arrivalAirport) {
+                return null;
+            }
+
+            const actualCancelled = !(
+                !!fullFlight?.statusDetails![0].arrival?.actualTime ||
+                !!fullFlight?.statusDetails![0].departure?.actualTime
+            );
+            const isEligible = delayMinutes > 180 || actualCancelled;
+
+            const formattedFlight: FlightData = {
+                isEligible,
+                reason: actualCancelled ? 'cancellation' : 'delay',
+                delayMinutes,
+                arrivalDateLocal: combineDateTime(
+                    fullFlight?.arrival?.date?.local,
+                    fullFlight?.arrival?.time?.local,
+                    'local',
+                ),
+                departureDateLocal: combineDateTime(
+                    fullFlight?.departure?.date?.local,
+                    fullFlight?.departure?.time?.local,
+                    'local',
+                ),
+                arrivalDateUtc: combineDateTime(
+                    fullFlight?.arrival?.date?.utc,
+                    fullFlight?.arrival?.time?.utc,
+                    'utc',
+                ),
+                departureDateUtc: combineDateTime(
+                    fullFlight?.departure?.date?.utc,
+                    fullFlight?.departure?.time?.utc,
+                    'utc',
+                ),
+                departureAirport: {
+                    name: departureAirport.name,
+                    iata: fullFlight.departure.airport.iata,
+                    icao: fullFlight.departure.airport.icao,
+                    city: departureAirport.city,
+                },
+                arrivalAirport: {
+                    name: arrivalAirport.name,
+                    iata: fullFlight.arrival.airport.iata,
+                    icao: fullFlight.arrival.airport.icao,
+                    city: arrivalAirport.city,
+                },
+            };
+
+            if (!isFlightData(formattedFlight)) {
+                console.warn(`Flight ${airlineCode}${flightCode} includes wrong response from OAG.
+Final flight object doesn't implement CreateFlightData interface.
+${JSON.stringify(formattedFlight, null, 2)}`);
+
+                return null;
+            }
+
+            return formattedFlight;
+        } catch (e) {
+            console.log(e);
             return null;
         }
     }
@@ -287,5 +436,28 @@ ${JSON.stringify(flight, null, 2)}`);
         end.setUTCHours(23, 59, 59, 999);
 
         return { start, end };
+    }
+
+    private getArrivalDelayMinutesForOAG(
+        flight: IFullOAGFlight,
+    ): number | null {
+        const scheduledDate = flight.arrival?.date?.utc;
+        const scheduledTime = flight.arrival?.time?.utc;
+        const actualUtc =
+            flight.statusDetails?.[0]?.arrival?.actualTime?.onGround?.utc;
+
+        if (!scheduledDate || !scheduledTime || !actualUtc) return null;
+
+        const scheduledIso = `${scheduledDate}T${scheduledTime}:00Z`;
+
+        const scheduled = new Date(scheduledIso);
+        const actual = new Date(actualUtc);
+
+        if (isNaN(scheduled.getTime()) || isNaN(actual.getTime())) return null;
+
+        const diffMs = actual.getTime() - scheduled.getTime();
+        const diffMinutes = Math.round(diffMs / 60000);
+
+        return diffMinutes;
     }
 }

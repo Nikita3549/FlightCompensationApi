@@ -7,6 +7,7 @@ import { AirlineModule } from './modules/airline/airline.module';
 import { FlightModule } from './modules/flight/flight.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { AirportModule } from './modules/airport/airport.module';
 
 @Module({
     imports: [
@@ -18,6 +19,7 @@ import { RedisModule } from './modules/redis/redis.module';
         AirlineModule,
         FlightModule,
         RedisModule,
+        AirportModule,
     ],
     controllers: [AppController],
     providers: [AppService],

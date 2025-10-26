@@ -25,13 +25,20 @@ export class CompensationController {
         const cacheKey = `eligibility:${keyIata}${keyFlight}:${dateKey}`;
 
         const airline = await this.airlineService.getAirlineByIata(iataCode);
-        const airlineCode = airline ? airline.icao : iataCode;
+        let airlineCodeType: 'IATA' | 'ICAO' = 'IATA';
+        let airlineCode;
+
+        if (airline) {
+            airlineCode = airline.icao;
+            airlineCodeType = 'ICAO';
+        } else {
+            airlineCode = iataCode;
+        }
         const flightNumber = `${iataCode}${flightCode}`;
 
         const cached = await this.redis.get(cacheKey);
         if (cached) {
             try {
-                console.log('cache');
                 const flightFromCache = JSON.parse(cached) as FlightData;
                 return this.buildEligibilityResponse(flightFromCache);
             } catch {
@@ -39,11 +46,11 @@ export class CompensationController {
             }
         }
 
-        console.log('api');
         let flight = await this.flightService.getFlightByFlightCode(
             flightCode,
             airlineCode,
             date,
+            airlineCodeType,
         );
 
         if (!flight) {
