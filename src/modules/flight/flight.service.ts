@@ -106,7 +106,6 @@ export class FlightService {
             );
 
             const fullFlight = res.data;
-            console.log(JSON.stringify(fullFlight, null, 2));
 
             if (
                 !fullFlight?.arrival?.date?.local ||
