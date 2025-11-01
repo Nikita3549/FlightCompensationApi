@@ -140,9 +140,14 @@ export class FlightService {
             }
 
             const actualCancelled = !(
-                !!fullFlight?.statusDetails![0].arrival?.actualTime ||
-                !!fullFlight?.statusDetails![0].departure?.actualTime
+                (!!fullFlight?.statusDetails![0].arrival?.actualTime ||
+                    !!fullFlight?.statusDetails![0].departure?.estimatedTime
+                        .offGround.utc) &&
+                (!!fullFlight?.statusDetails![0].departure?.actualTime ||
+                    !!fullFlight?.statusDetails![0].arrival?.estimatedTime
+                        .onGround.utc)
             );
+
             const isEligible = delayMinutes > 180 || actualCancelled;
 
             const formattedFlight: FlightData = {
